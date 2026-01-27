@@ -21,6 +21,19 @@ const userSchema = new mongoose.Schema({
         enum: ['male', 'female', 'non-binary'],
         required: [true, 'Please select a gender'],
     },
+    role: {
+        type: String,
+        enum: ['admin', 'employee', 'user'],
+        default: 'user',
+    },
+    permissions: [{
+        type: String,
+        enum: ['apply_event', 'bank_approval', 'accept_event', 'hosting', 'manage_users', 'm    anage_payments', 'view_reports'],
+    }],
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
 }, {
     timestamps: true,
 });

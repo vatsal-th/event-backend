@@ -18,6 +18,9 @@ app.use(cors());
 
 // Routes
 app.use('/api/auth', require('./src/routes/authRoutes'));
+app.use('/api/admin', require('./src/routes/adminRoutes'));
+app.use('/api/complaints', require('./src/routes/complaintRoutes'));
+app.use('/api/admin/complaints', require('./src/routes/adminComplaintRoutes'));
 
 // Default Route
 app.get('/', (req, res) => {

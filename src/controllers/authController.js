@@ -33,6 +33,10 @@ exports.registerUser = async (req, res) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
+        // Check if there are any admins
+        const adminCount = await User.countDocuments({ role: 'admin' });
+        const role = adminCount === 0 ? 'admin' : 'user';
+
         // Hash password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
@@ -43,6 +47,7 @@ exports.registerUser = async (req, res) => {
             email,
             password: hashedPassword,
             gender: gender.toLowerCase(),
+            role,
         });
 
         if (user) {
@@ -51,6 +56,8 @@ exports.registerUser = async (req, res) => {
                 fullName: user.fullName,
                 email: user.email,
                 gender: user.gender,
+                role: user.role,
+                permissions: user.permissions,
                 token: generateToken(user._id),
             });
         } else {
@@ -76,10 +83,49 @@ exports.loginUser = async (req, res) => {
                 _id: user.id,
                 fullName: user.fullName,
                 email: user.email,
+                role: user.role,
+                permissions: user.permissions,
                 token: generateToken(user._id),
             });
         } else {
             res.status(400).json({ message: 'Invalid credentials' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Authenticate an admin
+// @route   POST /api/auth/admin-login
+// @access  Public
+exports.adminLogin = async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        // Check for user email
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Check if user is admin
+        if (user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied. Only admins can login here.' });
+        }
+
+        // Validate password
+        if (await bcrypt.compare(password, user.password)) {
+            res.json({
+                _id: user.id,
+                fullName: user.fullName,
+                email: user.email,
+                role: user.role,
+                permissions: user.permissions,
+                token: generateToken(user._id),
+            });
+        } else {
+            res.status(401).json({ message: 'Invalid credentials' });
         }
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -113,7 +159,7 @@ exports.forgotPassword = async (req, res) => {
 
         await user.save();
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = process.env.FRONTEND_URL;
         const resetUrl = `${frontendUrl}/resetpassword/${resetToken}`;
 
         const message = `
@@ -208,7 +254,14 @@ exports.resetPassword = async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 exports.getMe = async (req, res) => {
-    res.status(200).json(req.user);
+    res.status(200).json({
+        _id: req.user._id,
+        fullName: req.user.fullName,
+        email: req.user.email,
+        gender: req.user.gender,
+        role: req.user.role,
+        permissions: req.user.permissions,
+    });
 };
 
 // @desc    Update user details

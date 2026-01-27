@@ -30,4 +30,22 @@ const protect = async (req, res, next) => {
     }
 };
 
-module.exports = { protect };
+const authorizeAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Access denied. Admin role required.' });
+    }
+};
+
+const authorizePermissions = (...permissions) => {
+    return (req, res, next) => {
+        if (req.user && (req.user.role === 'admin' || permissions.some(perm => req.user.permissions.includes(perm)))) {
+            next();
+        } else {
+            res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+        }
+    };
+};
+
+module.exports = { protect, authorizeAdmin, authorizePermissions };
