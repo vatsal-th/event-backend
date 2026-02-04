@@ -99,7 +99,7 @@ exports.updateAgencyStatus = async (req, res) => {
                 application.fullName
             );
 
-            application._rewardPoints = rewardPoints;
+            application.rewardPoints = rewardPoints;
         }
 
         application.status = status;
@@ -114,7 +114,7 @@ exports.updateAgencyStatus = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: `Agency application ${status.toLowerCase()} successfully${application._rewardPoints ? ` and ${application._rewardPoints} points awarded` : ''}`,
+            message: `Agency application ${status.toLowerCase()} successfully${application.rewardPoints ? ` and ${application.rewardPoints} points awarded` : ''}`,
             data: application
         });
     } catch (error) {

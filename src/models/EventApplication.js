@@ -62,6 +62,14 @@ const eventApplicationSchema = new mongoose.Schema({
     createdBy: {
         type: String,
         default: 'Automatic'
+    },
+    rewardPoints: {
+        type: Number,
+        default: 0
+    },
+    isScratched: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: true

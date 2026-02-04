@@ -102,8 +102,8 @@ exports.updateApplicationStatus = async (req, res) => {
                 application.fullName
             );
 
-            // Attach reward info to response
-            application._rewardPoints = rewardPoints;
+            // Save reward points to application
+            application.rewardPoints = rewardPoints;
         }
 
         application.status = status;
@@ -118,7 +118,7 @@ exports.updateApplicationStatus = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: `Application ${status.toLowerCase()} successfully${application._rewardPoints ? ` and ${application._rewardPoints} points awarded` : ''}`,
+            message: `Application ${status.toLowerCase()} successfully${application.rewardPoints ? ` and ${application.rewardPoints} points awarded` : ''}`,
             data: application
         });
     } catch (error) {

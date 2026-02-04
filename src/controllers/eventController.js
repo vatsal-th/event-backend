@@ -104,7 +104,7 @@ exports.updateEventStatus = async (req, res) => {
                 application.fullName
             );
 
-            application._rewardPoints = rewardPoints;
+            application.rewardPoints = rewardPoints;
         }
 
         application.status = status;
@@ -119,7 +119,7 @@ exports.updateEventStatus = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: `Event application ${status.toLowerCase()} successfully${application._rewardPoints ? ` and ${application._rewardPoints} points awarded` : ''}`,
+            message: `Event application ${status.toLowerCase()} successfully${application.rewardPoints ? ` and ${application.rewardPoints} points awarded` : ''}`,
             data: application
         });
     } catch (error) {
