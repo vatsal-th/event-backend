@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema({
     },
     permissions: [{
         type: String,
-        enum: ['apply_event', 'bank_approval', 'accept_event', 'hosting', 'manage_users', 'm    anage_payments', 'view_reports'],
+        enum: ['apply_event', 'bank_approval', 'accept_event', 'hosting', 'manage_users', 'manage_payments', 'view_reports'],
     }],
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
@@ -37,6 +37,11 @@ const userSchema = new mongoose.Schema({
     points: {
         type: Number,
         default: 0,
+    },
+    inviteId: {
+        type: String,
+        unique: true,
+        sparse: true,
     },
 }, {
     timestamps: true,

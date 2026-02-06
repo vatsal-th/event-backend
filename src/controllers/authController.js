@@ -15,7 +15,7 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 exports.registerUser = async (req, res) => {
-    const { fullName, email, password, confirmPassword, gender } = req.body;
+    const { fullName, email, password, confirmPassword, gender, referralCode } = req.body;
 
     if (!fullName || !email || !password || !confirmPassword || !gender) {
         return res.status(400).json({ message: 'Please add all fields' });
@@ -41,6 +41,10 @@ exports.registerUser = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // Generate unique invite ID for the new user
+        const { generateInviteId } = require('../utils/referralHelper');
+        const inviteId = await generateInviteId();
+
         // Create user
         const user = await User.create({
             fullName,
@@ -48,7 +52,20 @@ exports.registerUser = async (req, res) => {
             password: hashedPassword,
             gender: gender.toLowerCase(),
             role,
+            inviteId,
         });
+
+        // Process referral if referral code was provided
+        let referralMessage = '';
+        if (referralCode && referralCode.trim() !== '') {
+            const { processReferral } = require('../utils/referralHelper');
+            const referralResult = await processReferral(referralCode.trim().toUpperCase(), user._id);
+
+            if (referralResult.success) {
+                referralMessage = ` Referral code applied successfully! The referrer received ${referralResult.rewardPoints} points.`;
+            }
+            // Note: We don't fail registration if referral code is invalid
+        }
 
         if (user) {
             res.status(201).json({
@@ -58,7 +75,9 @@ exports.registerUser = async (req, res) => {
                 gender: user.gender,
                 role: user.role,
                 permissions: user.permissions,
+                inviteId: user.inviteId,
                 token: generateToken(user._id),
+                message: `User registered successfully!${referralMessage}`,
             });
         } else {
             res.status(400).json({ message: 'Invalid user data' });
@@ -261,6 +280,8 @@ exports.getMe = async (req, res) => {
         gender: req.user.gender,
         role: req.user.role,
         permissions: req.user.permissions,
+        inviteId: req.user.inviteId,
+        points: req.user.points,
     });
 };
 

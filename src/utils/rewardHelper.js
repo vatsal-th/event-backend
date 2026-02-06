@@ -4,6 +4,7 @@ const AgencyApplication = require('../models/AgencyApplication');
 const InfluencerApplication = require('../models/InfluencerApplication');
 const User = require('../models/userModel');
 const ActivityLog = require('../models/activityLogModel');
+const WalletTransaction = require('../models/WalletTransaction');
 
 /**
  * Calculates and awards points to a user upon application approval
@@ -51,6 +52,16 @@ exports.issueApplicationReward = async (userId, adminId, currentAppId, appType, 
         // Update User points
         await User.findByIdAndUpdate(userId, {
             $inc: { points: rewardPoints }
+        });
+
+        // Create wallet transaction for application reward
+        await WalletTransaction.create({
+            userId: userId,
+            transactionType: 'application_reward',
+            amount: rewardPoints,
+            description: `${appType} application approved - ${isFirstTime ? 'First time bonus' : 'Recurring'} reward`,
+            relatedId: currentAppId,
+            relatedModel: `${appType}Application`,
         });
 
         // Log the reward action

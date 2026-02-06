@@ -183,6 +183,7 @@ exports.scratchApplicationReward = async (req, res) => {
     try {
         const { type, id } = req.params;
         const userId = req.user._id;
+        const WalletTransaction = require('../models/WalletTransaction');
 
         let application;
         const query = { _id: id, userId };
@@ -206,6 +207,18 @@ exports.scratchApplicationReward = async (req, res) => {
 
         if (!application) {
             return res.status(404).json({ message: 'Application not found or unauthorized' });
+        }
+
+        // Create wallet transaction for scratch card reward
+        if (application.rewardPoints && application.rewardPoints > 0) {
+            await WalletTransaction.create({
+                userId: userId,
+                transactionType: 'application_reward',
+                amount: application.rewardPoints,
+                description: `Scratch card reward for ${type} application`,
+                relatedId: application._id,
+                relatedModel: `${type.charAt(0).toUpperCase() + type.slice(1)}Application`,
+            });
         }
 
         res.status(200).json({
