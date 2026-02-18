@@ -5,6 +5,7 @@ const InfluencerApplication = require('../models/InfluencerApplication');
 const User = require('../models/userModel');
 const ActivityLog = require('../models/activityLogModel');
 const WalletTransaction = require('../models/WalletTransaction');
+const referralHelper = require('./referralHelper');
 
 /**
  * Calculates and awards points to a user upon application approval
@@ -70,6 +71,9 @@ exports.issueApplicationReward = async (userId, adminId, currentAppId, appType, 
             action: `Issued ${appType} Reward`,
             details: `Awarded ${rewardPoints} points to ${applicantName || 'User'} for ${appType} approval (${isFirstTime ? 'First Time' : 'Recurring'})`
         });
+
+        // Check if this user was referred by someone and reward them
+        await referralHelper.completeReferral(userId);
 
         return rewardPoints;
     } catch (error) {

@@ -33,6 +33,8 @@ app.use('/api/referrals', require('./src/routes/referralRoutes'));
 app.use('/api/wallet', require('./src/routes/walletRoutes'));
 app.use('/api/bank-details', require('./src/routes/bankDetailsRoutes'));
 app.use('/api/withdrawals', require('./src/routes/withdrawalRoutes'));
+app.use('/api/topups', require('./src/routes/topUpRoutes'));
+app.use('/api/salary', require('./src/routes/salaryRoutes'));
 
 // Default Route
 app.get('/', (req, res) => {

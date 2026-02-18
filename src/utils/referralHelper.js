@@ -37,7 +37,7 @@ exports.generateInviteId = async () => {
 };
 
 /**
- * Process referral when a new user registers with a referral code
+ * Process referral when a new user registers with a referral code (Logs only)
  * @param {string} referralCode - The invite code used by the new user
  * @param {string} newUserId - ID of the newly registered user
  * @returns {Promise<Object>} - Result object with success status and details
@@ -64,33 +64,23 @@ exports.processReferral = async (referralCode, newUserId) => {
 
         const rewardPoints = 10;
 
-        // Award points to referrer
-        await User.findByIdAndUpdate(referrer._id, {
-            $inc: { points: rewardPoints }
+        // Save who referred this user
+        await User.findByIdAndUpdate(newUserId, {
+            referredBy: referrer._id
         });
 
-        // Create referral log
+        // Create referral log (Pending status)
         const referralLog = await ReferralLog.create({
             referrerId: referrer._id,
             referredUserId: newUserId,
             inviteCode: referralCode,
             rewardPoints,
-        });
-
-        // Create wallet transaction
-        await WalletTransaction.create({
-            userId: referrer._id,
-            transactionType: 'referral_reward',
-            amount: rewardPoints,
-            description: `Referral reward for inviting new user`,
-            relatedId: referralLog._id,
-            relatedModel: 'ReferralLog',
+            status: 'Pending'
         });
 
         return {
             success: true,
-            message: 'Referral processed successfully',
-            rewardPoints,
+            message: 'Referral linkage saved. Reward will be issued after first service approval.',
             referrerId: referrer._id,
         };
     } catch (error) {
@@ -100,5 +90,45 @@ exports.processReferral = async (referralCode, newUserId) => {
             message: 'Error processing referral',
             error: error.message,
         };
+    }
+};
+
+/**
+ * Award the referral reward to the referrer when the referred user's application is approved
+ * @param {string} referredUserId - ID of the user who was referred
+ * @returns {Promise<void>}
+ */
+exports.completeReferral = async (referredUserId) => {
+    try {
+        // Find pending referral log
+        const referralLog = await ReferralLog.findOne({ 
+            referredUserId, 
+            status: 'Pending' 
+        });
+
+        if (!referralLog) return;
+
+        // Award points to referrer
+        await User.findByIdAndUpdate(referralLog.referrerId, {
+            $inc: { points: referralLog.rewardPoints }
+        });
+
+        // Create wallet transaction for referrer
+        await WalletTransaction.create({
+            userId: referralLog.referrerId,
+            transactionType: 'referral_reward',
+            amount: referralLog.rewardPoints,
+            description: `Referral reward for user activity - Approved Service`,
+            relatedId: referralLog._id,
+            relatedModel: 'ReferralLog',
+        });
+
+        // Mark log as completed
+        referralLog.status = 'Completed';
+        await referralLog.save();
+
+        console.log(`Referral reward of ${referralLog.rewardPoints} points issued to referrer ${referralLog.referrerId}`);
+    } catch (error) {
+        console.error('Error completing referral:', error);
     }
 };

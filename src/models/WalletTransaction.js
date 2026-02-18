@@ -8,7 +8,7 @@ const walletTransactionSchema = new mongoose.Schema({
     },
     transactionType: {
         type: String,
-        enum: ['referral_reward', 'application_reward', 'withdrawal', 'admin_adjustment'],
+        enum: ['referral_reward', 'application_reward', 'withdrawal', 'admin_adjustment', 'withdrawal_refund'],
         required: true,
     },
     amount: {
@@ -25,7 +25,7 @@ const walletTransactionSchema = new mongoose.Schema({
     },
     relatedModel: {
         type: String,
-        enum: ['ReferralLog', 'EventApplication', 'HostingApplication', 'AgencyApplication', 'InfluencerApplication', 'User'],
+        enum: ['ReferralLog', 'EventApplication', 'HostingApplication', 'AgencyApplication', 'InfluencerApplication', 'User', 'WithdrawalRequest', 'TopUp'],
     },
     timestamp: {
         type: Date,

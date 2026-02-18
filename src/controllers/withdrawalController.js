@@ -11,13 +11,38 @@ const WalletTransaction = require('../models/WalletTransaction');
 exports.createWithdrawalRequest = async (req, res) => {
     try {
         const userId = req.user._id;
-        const { amount } = req.body;
+        const { amount, walletPassword } = req.body;
 
         // Validate amount
         if (!amount || amount < 100) {
             return res.status(400).json({
                 success: false,
                 message: 'Minimum withdrawal amount is 100 points'
+            });
+        }
+
+        // Wallet Password verification
+        const userWithPassword = await User.findById(userId).select('+walletPassword');
+        
+        if (!userWithPassword.walletPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please set a wallet password before making a withdrawal'
+            });
+        }
+
+        if (!walletPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Wallet password is required to complete this transaction'
+            });
+        }
+
+        const isMatch = await require('bcryptjs').compare(walletPassword, userWithPassword.walletPassword);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                message: 'Incorrect wallet password'
             });
         }
 
@@ -51,6 +76,25 @@ exports.createWithdrawalRequest = async (req, res) => {
             });
         }
 
+        // Find the admin to receive the points
+        const admin = await User.findOne({ role: 'admin' }).sort({ createdAt: 1 });
+        if (!admin) {
+            return res.status(500).json({
+                success: false,
+                message: 'No admin found to process withdrawal'
+            });
+        }
+
+        // Deduct points from user
+        await User.findByIdAndUpdate(userId, {
+            $inc: { points: -amount }
+        });
+
+        // Add points to admin
+        await User.findByIdAndUpdate(admin._id, {
+            $inc: { points: amount }
+        });
+
         // Create withdrawal request
         const withdrawal = await WithdrawalRequest.create({
             userId,
@@ -58,14 +102,46 @@ exports.createWithdrawalRequest = async (req, res) => {
             bankDetailsId: bankDetails._id,
         });
 
+        // Create wallet transaction for user
+        const userWalletTransaction = await WalletTransaction.create({
+            userId: userId,
+            transactionType: 'withdrawal',
+            amount: -amount,
+            description: `Withdrawal request created - ${amount} points to admin balance`,
+            relatedId: withdrawal._id,
+            relatedModel: 'WithdrawalRequest',
+        });
+
+        // Create wallet transaction for admin
+        await WalletTransaction.create({
+            userId: admin._id,
+            transactionType: 'admin_adjustment',
+            amount: amount,
+            description: `Received points from user withdrawal - User: ${req.user.fullName} (${userId})`,
+            relatedId: withdrawal._id,
+            relatedModel: 'WithdrawalRequest',
+        });
+
+        // Update withdrawal with transaction ID
+        withdrawal.transactionId = userWalletTransaction._id;
+        await withdrawal.save();
+
         const populatedWithdrawal = await WithdrawalRequest.findById(withdrawal._id)
             .populate('bankDetailsId')
             .populate('userId', 'fullName email');
 
+        const adminBankDetails = await BankDetails.findOne({ userId: admin._id });
+
         res.status(201).json({
             success: true,
-            message: 'Withdrawal request created successfully',
+            message: 'Withdrawal request created successfully and points transferred to admin',
             data: populatedWithdrawal,
+            adminDetails: {
+                fullName: admin.fullName,
+                email: admin.email,
+                points: admin.points,
+                bankDetails: adminBankDetails || 'No bank details added by admin'
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -215,34 +291,10 @@ exports.approveWithdrawal = async (req, res) => {
             });
         }
 
-        // Check if user still has sufficient balance
-        if (withdrawal.userId.points < withdrawal.amount) {
-            return res.status(400).json({
-                success: false,
-                message: 'User has insufficient balance for this withdrawal'
-            });
-        }
-
-        // Deduct points from user
-        await User.findByIdAndUpdate(withdrawal.userId._id, {
-            $inc: { points: -withdrawal.amount }
-        });
-
-        // Create wallet transaction
-        const walletTransaction = await WalletTransaction.create({
-            userId: withdrawal.userId._id,
-            transactionType: 'withdrawal',
-            amount: -withdrawal.amount,
-            description: `Withdrawal approved - ${withdrawal.amount} points`,
-            relatedId: withdrawal._id,
-            relatedModel: 'WithdrawalRequest',
-        });
-
         // Update withdrawal request
         withdrawal.status = 'approved';
         withdrawal.processedAt = Date.now();
         withdrawal.processedBy = adminId;
-        withdrawal.transactionId = walletTransaction._id;
         await withdrawal.save();
 
         const updatedWithdrawal = await WithdrawalRequest.findById(id)
@@ -294,6 +346,41 @@ exports.rejectWithdrawal = async (req, res) => {
                 message: `Withdrawal is already ${withdrawal.status}`
             });
         }
+
+        // Find the admin who received the points (main admin)
+        const mainAdmin = await User.findOne({ role: 'admin' }).sort({ createdAt: 1 });
+
+        if (mainAdmin) {
+            // Deduct points back from admin
+            await User.findByIdAndUpdate(mainAdmin._id, {
+                $inc: { points: -withdrawal.amount }
+            });
+
+            // Create transaction for admin
+            await WalletTransaction.create({
+                userId: mainAdmin._id,
+                transactionType: 'admin_adjustment',
+                amount: -withdrawal.amount,
+                description: `Withdrawal rejected - points returned to user from admin balance`,
+                relatedId: withdrawal._id,
+                relatedModel: 'WithdrawalRequest',
+            });
+        }
+
+        // Refund points to user
+        await User.findByIdAndUpdate(withdrawal.userId, {
+            $inc: { points: withdrawal.amount }
+        });
+
+        // Create refund transaction for user
+        await WalletTransaction.create({
+            userId: withdrawal.userId,
+            transactionType: 'withdrawal_refund',
+            amount: withdrawal.amount,
+            description: `Withdrawal rejected - points refunded. Reason: ${reason}`,
+            relatedId: withdrawal._id,
+            relatedModel: 'WithdrawalRequest',
+        });
 
         // Update withdrawal request
         withdrawal.status = 'rejected';

@@ -19,6 +19,11 @@ const referralLogSchema = new mongoose.Schema({
         type: Number,
         default: 10,
     },
+    status: {
+        type: String,
+        enum: ['Pending', 'Completed'],
+        default: 'Pending',
+    },
     timestamp: {
         type: Date,
         default: Date.now,

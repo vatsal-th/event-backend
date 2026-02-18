@@ -43,6 +43,14 @@ const userSchema = new mongoose.Schema({
         unique: true,
         sparse: true,
     },
+    walletPassword: {
+        type: String,
+        select: false,
+    },
+    referredBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
 }, {
     timestamps: true,
 });

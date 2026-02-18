@@ -5,6 +5,8 @@ const HostingApplication = require('../models/HostingApplication');
 const EventApplication = require('../models/EventApplication');
 const AgencyApplication = require('../models/AgencyApplication');
 const InfluencerApplication = require('../models/InfluencerApplication');
+const TopUp = require('../models/TopUp');
+const WalletTransaction = require('../models/WalletTransaction');
 
 // @desc    Get all dropdown data for users
 // @route   GET /api/dropdowns
@@ -43,7 +45,7 @@ exports.getUserHistory = async (req, res) => {
     try {
         const userId = req.user._id;
 
-        const [hosting, events, agency, influencers] = await Promise.all([
+        const [hosting, events, agency, influencers, topups] = await Promise.all([
             HostingApplication.find({ userId })
                 .populate('countryId', 'name')
                 .populate('categoryId', 'name')
@@ -58,6 +60,9 @@ exports.getUserHistory = async (req, res) => {
                 .sort({ createdAt: -1 }),
             InfluencerApplication.find({ userId })
                 .populate('countryId', 'name')
+                .sort({ createdAt: -1 }),
+            TopUp.find({ userId })
+                .populate('appId', 'appName')
                 .sort({ createdAt: -1 })
         ]);
 
@@ -67,7 +72,8 @@ exports.getUserHistory = async (req, res) => {
                 hosting,
                 events,
                 agency,
-                influencers
+                influencers,
+                topups
             }
         });
     } catch (error) {
@@ -139,7 +145,7 @@ exports.getLatestApplicationStatus = async (req, res) => {
     try {
         const userId = req.user._id;
 
-        const [latestHosting, latestEvent, latestAgency, latestInfluencer] = await Promise.all([
+        const [latestHosting, latestEvent, latestAgency, latestInfluencer, latestTopUp] = await Promise.all([
             HostingApplication.findOne({ userId })
                 .populate('countryId', 'name')
                 .populate('categoryId', 'name')
@@ -158,6 +164,10 @@ exports.getLatestApplicationStatus = async (req, res) => {
             InfluencerApplication.findOne({ userId })
                 .populate('countryId', 'name')
                 .sort({ createdAt: -1 })
+                .lean(),
+            TopUp.findOne({ userId })
+                .populate('appId', 'appName')
+                .sort({ createdAt: -1 })
                 .lean()
         ]);
 
@@ -168,7 +178,8 @@ exports.getLatestApplicationStatus = async (req, res) => {
                 hosting: latestHosting ? { ...latestHosting, applicationType: 'Hosting' } : null,
                 event: latestEvent ? { ...latestEvent, applicationType: 'Event' } : null,
                 agency: latestAgency ? { ...latestAgency, applicationType: 'Agency' } : null,
-                influencer: latestInfluencer ? { ...latestInfluencer, applicationType: 'Influencer' } : null
+                influencer: latestInfluencer ? { ...latestInfluencer, applicationType: 'Influencer' } : null,
+                topup: latestTopUp ? { ...latestTopUp, applicationType: 'TopUp' } : null
             }
         });
     } catch (error) {
