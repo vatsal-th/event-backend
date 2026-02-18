@@ -70,6 +70,10 @@ const eventApplicationSchema = new mongoose.Schema({
     isScratched: {
         type: Boolean,
         default: false
+    },
+    eventBanner: {
+        type: String,
+        default: ''
     }
 }, {
     timestamps: true

@@ -241,3 +241,70 @@ exports.scratchApplicationReward = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc    Get user dashboard statistics
+// @route   GET /api/dashboard/stats
+// @access  Private
+exports.getDashboardStats = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const User = require('../models/userModel');
+
+        // Execute all statutory counts and sums in parallel
+        const [
+            totalInvites,
+            totalHosts,
+            totalPlayEvents,
+            totalAgency,
+            totalInfluencers,
+            topUpStats,
+            earningStats
+        ] = await Promise.all([
+            // Total Invites: Users referred by this user
+            User.countDocuments({ referredBy: userId }),
+
+            // Total Hosts: Approved Hosting Applications
+            HostingApplication.countDocuments({ userId, status: 'Approved' }),
+
+            // Total Play Events: Approved Event Applications
+            EventApplication.countDocuments({ userId, status: 'Approved' }),
+
+            // Total Agency: Approved Agency Applications
+            AgencyApplication.countDocuments({ userId, status: 'Approved' }),
+
+            // Total Influencers: Approved Influencer Applications
+            InfluencerApplication.countDocuments({ userId, status: 'Approved' }),
+
+            // Total Top-Ups: Sum of approved top-up amounts
+            TopUp.aggregate([
+                { $match: { userId, status: 'Approved' } },
+                { $group: { _id: null, total: { $sum: "$amount" } } }
+            ]),
+
+            // Total Earnings: Sum of all positive reward transactions
+            WalletTransaction.aggregate([
+                { $match: { userId, amount: { $gt: 0 } } },
+                { $group: { _id: null, total: { $sum: "$amount" } } }
+            ])
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                totalEarnings: earningStats[0]?.total || 0,
+                totalInvites: totalInvites || 0,
+                totalInfluencers: totalInfluencers || 0,
+                walletBalance: req.user.points || 0,
+                totalAgency: totalAgency || 0,
+                totalHosts: totalHosts || 0,
+                totalPlayEvents: totalPlayEvents || 0,
+                totalTopUps: topUpStats[0]?.total || 0
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};

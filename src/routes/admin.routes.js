@@ -15,6 +15,7 @@ const {
     deleteApp
 } = require('../controllers/admin.controller');
 const { protect, authorizeAdmin } = require('../middlewares/authMiddleware');
+const upload = require('../middlewares/uploadMiddleware');
 
 // Country routes
 router.post('/country', protect, authorizeAdmin, addCountry);

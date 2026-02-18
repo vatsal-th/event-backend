@@ -57,6 +57,24 @@ exports.submitEventApplication = async (req, res) => {
     }
 };
 
+// @desc    Get current user's event applications
+// @route   GET /api/events/my
+// @access  Private (User)
+exports.getMyEvents = async (req, res) => {
+    try {
+        const applications = await EventApplication.find({ userId: req.user._id })
+            .populate('countryId', 'name')
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            data: applications
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Get all event applications (Admin only)
 // @route   GET /api/admin/events/applications
 // @access  Private (Admin)
@@ -105,6 +123,11 @@ exports.updateEventStatus = async (req, res) => {
             );
 
             application.rewardPoints = rewardPoints;
+            
+            // Handle banner upload
+            if (req.file) {
+                application.eventBanner = req.file.path;
+            }
         }
 
         application.status = status;

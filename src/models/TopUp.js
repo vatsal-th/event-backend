@@ -24,6 +24,17 @@ const topUpSchema = new mongoose.Schema({
         required: [true, 'Top-up amount is required'],
         min: [1, 'Minimum amount is 1'],
     },
+    paymentMethod: {
+        type: String,
+        enum: ['Main Wallet', 'Cash'],
+        default: 'Main Wallet',
+    },
+    utrNumber: {
+        type: String,
+    },
+    paymentProof: {
+        type: String,
+    },
     walletType: {
         type: String,
         default: 'Main Wallet',

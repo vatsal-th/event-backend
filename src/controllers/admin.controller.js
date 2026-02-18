@@ -239,14 +239,17 @@ exports.deleteCategory = async (req, res) => {
 // @route   POST /api/admin/app
 // @access  Private (Admin)
 exports.addApp = async (req, res) => {
-    const { appName } = req.body;
+    const { appName, status } = req.body;
 
     if (!appName) {
         return res.status(400).json({ message: 'App name is required' });
     }
 
     try {
-        const app = await App.create({ appName: appName.trim() });
+        const app = await App.create({ 
+            appName: appName.trim(),
+            status: status || 'active'
+        });
 
         await ActivityLog.create({
             user: req.user._id,

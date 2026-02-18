@@ -5,14 +5,23 @@ const {
     createTopUp,
     getUserTopUps,
     getAllTopUps,
-    updateTopUpStatus
+    updateTopUpStatus,
+    getApps,
+    updateTopUpQR,
+    getTopUpQR,
+    deleteTopUpQR
 } = require('../controllers/topUpController');
+const upload = require('../middlewares/uploadMiddleware');
 
 // User Routes
-router.post('/create', protect, createTopUp);
+router.get('/apps', protect, getApps);
+router.get('/qr', protect, getTopUpQR);
+router.post('/create', protect, upload.single('paymentProof'), createTopUp);
 router.get('/history', protect, getUserTopUps);
 
 // Admin Routes
+router.post('/admin/qr', protect, authorizeAdmin, upload.single('qrCode'), updateTopUpQR);
+router.delete('/admin/qr', protect, authorizeAdmin, deleteTopUpQR);
 router.get('/admin/all', protect, authorizeAdmin, getAllTopUps);
 router.put('/admin/update/:id', protect, authorizeAdmin, updateTopUpStatus);
 

@@ -1,7 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { getDropdowns, getUserHistory, getUserRewardHistory, getLatestApplicationStatus, scratchApplicationReward } = require('../controllers/user.controller');
+const { 
+    getDropdowns, 
+    getUserHistory, 
+    getUserRewardHistory, 
+    getLatestApplicationStatus, 
+    scratchApplicationReward,
+    getDashboardStats 
+} = require('../controllers/user.controller');
 const { protect } = require('../middlewares/authMiddleware');
+
+// Get user dashboard statistics
+router.get('/dashboard/stats', protect, getDashboardStats);
 
 // Get all dropdown data
 router.get('/dropdowns', getDropdowns);
