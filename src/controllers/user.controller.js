@@ -7,6 +7,9 @@ const AgencyApplication = require('../models/AgencyApplication');
 const InfluencerApplication = require('../models/InfluencerApplication');
 const TopUp = require('../models/TopUp');
 const WalletTransaction = require('../models/WalletTransaction');
+const WithdrawalRequest = require('../models/WithdrawalRequest');
+const ReferralLog = require('../models/ReferralLog');
+const User = require('../models/userModel');
 
 // @desc    Get all dropdown data for users
 // @route   GET /api/dropdowns
@@ -194,8 +197,6 @@ exports.scratchApplicationReward = async (req, res) => {
     try {
         const { type, id } = req.params;
         const userId = req.user._id;
-        const WalletTransaction = require('../models/WalletTransaction');
-
         let application;
         const query = { _id: id, userId };
 
@@ -248,7 +249,6 @@ exports.scratchApplicationReward = async (req, res) => {
 exports.getDashboardStats = async (req, res) => {
     try {
         const userId = req.user._id;
-        const User = require('../models/userModel');
 
         // Execute all statutory counts and sums in parallel
         const [
@@ -258,7 +258,15 @@ exports.getDashboardStats = async (req, res) => {
             totalAgency,
             totalInfluencers,
             topUpStats,
-            earningStats
+            earningStats,
+            // Recent Activities
+            recentHosting,
+            recentEvent,
+            recentAgency,
+            recentInfluencer,
+            recentTopUp,
+            recentWithdrawal,
+            recentInvite
         ] = await Promise.all([
             // Total Invites: Users referred by this user
             User.countDocuments({ referredBy: userId }),
@@ -285,8 +293,33 @@ exports.getDashboardStats = async (req, res) => {
             WalletTransaction.aggregate([
                 { $match: { userId, amount: { $gt: 0 } } },
                 { $group: { _id: null, total: { $sum: "$amount" } } }
-            ])
+            ]),
+
+            // Fetch recent ones (fetching 7 of each to ensure we have enough for a combined top 7)
+            HostingApplication.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
+            EventApplication.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
+            AgencyApplication.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
+            InfluencerApplication.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
+            TopUp.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
+            WithdrawalRequest.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
+            ReferralLog.find({ referrerId: userId }).sort({ createdAt: -1 }).limit(7).lean()
         ]);
+
+        // Map all activities to a common format
+        const activities = [
+            ...recentHosting.map(a => ({ type: 'Apply', subType: 'Hosting', title: 'Hosting Application', status: a.status, date: a.createdAt, amount: null })),
+            ...recentEvent.map(a => ({ type: 'Apply', subType: 'Event', title: 'Event Application', status: a.status, date: a.createdAt, amount: null })),
+            ...recentAgency.map(a => ({ type: 'Apply', subType: 'Agency', title: 'Agency Application', status: a.status, date: a.createdAt, amount: null })),
+            ...recentInfluencer.map(a => ({ type: 'Apply', subType: 'Influencer', title: 'Influencer Application', status: a.status, date: a.createdAt, amount: null })),
+            ...recentTopUp.map(a => ({ type: 'Top Up', subType: 'Wallet', title: 'Wallet Top Up', status: a.status, date: a.createdAt, amount: a.amount })),
+            ...recentWithdrawal.map(a => ({ type: 'Withdraw', subType: 'Wallet', title: 'Withdrawal Request', status: a.status, date: a.createdAt, amount: a.amount })),
+            ...recentInvite.map(a => ({ type: 'Invite', subType: 'Referral', title: 'Invite New User', status: a.status, date: a.createdAt, amount: a.rewardPoints }))
+        ];
+
+        // Sort by date (newest first) and take the top 7
+        const recentActivities = activities
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 7);
 
         res.status(200).json({
             success: true,
@@ -298,7 +331,8 @@ exports.getDashboardStats = async (req, res) => {
                 totalAgency: totalAgency || 0,
                 totalHosts: totalHosts || 0,
                 totalPlayEvents: totalPlayEvents || 0,
-                totalTopUps: topUpStats[0]?.total || 0
+                totalTopUps: topUpStats[0]?.total || 0,
+                recentActivities
             }
         });
     } catch (error) {

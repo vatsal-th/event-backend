@@ -5,13 +5,13 @@ const {
     getInfluencerApplications,
     updateInfluencerStatus
 } = require('../controllers/influencerController');
-const { protect, authorizeAdmin } = require('../middlewares/authMiddleware');
+const { protect, authorizePermissions } = require('../middlewares/authMiddleware');
 
 // User routes
 router.post('/apply', protect, submitInfluencerApplication);
 
 // Admin routes
-router.get('/admin/applications', protect, authorizeAdmin, getInfluencerApplications);
-router.put('/admin/application/:id', protect, authorizeAdmin, updateInfluencerStatus);
+router.get('/admin/applications', protect, authorizePermissions('influencer_approval'), getInfluencerApplications);
+router.put('/admin/application/:id', protect, authorizePermissions('influencer_approval'), updateInfluencerStatus);
 
 module.exports = router;

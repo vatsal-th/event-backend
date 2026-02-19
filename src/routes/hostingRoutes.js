@@ -5,13 +5,13 @@ const {
     getApplications,
     updateApplicationStatus
 } = require('../controllers/hostingController');
-const { protect, authorizeAdmin } = require('../middlewares/authMiddleware');
+const { protect, authorizePermissions } = require('../middlewares/authMiddleware');
 
 // User routes
 router.post('/apply', protect, submitApplication);
 
 // Admin routes
-router.get('/admin/applications', protect, authorizeAdmin, getApplications);
-router.put('/admin/application/:id', protect, authorizeAdmin, updateApplicationStatus);
+router.get('/admin/applications', protect, authorizePermissions('hosting_approval'), getApplications);
+router.put('/admin/application/:id', protect, authorizePermissions('hosting_approval'), updateApplicationStatus);
 
 module.exports = router;

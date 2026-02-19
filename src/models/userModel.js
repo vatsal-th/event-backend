@@ -28,7 +28,20 @@ const userSchema = new mongoose.Schema({
     },
     permissions: [{
         type: String,
-        enum: ['apply_event', 'bank_approval', 'accept_event', 'hosting', 'manage_users', 'manage_payments', 'view_reports'],
+        enum: [
+            'hosting_approval',
+            'event_approval',
+            'agency_approval',
+            'influencer_approval',
+            'topup_approval',
+            'complaints_manage',
+            'training_manage',
+            'content_manage',
+            'bank_manage',
+            'withdrawal_manage',
+            'manage_users',
+            'view_reports'
+        ],
     }],
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,

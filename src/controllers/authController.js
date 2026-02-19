@@ -128,9 +128,9 @@ exports.adminLogin = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Check if user is admin
-        if (user.role !== 'admin') {
-            return res.status(403).json({ message: 'Access denied. Only admins can login here.' });
+        // Check if user is admin or employee
+        if (user.role !== 'admin' && user.role !== 'employee') {
+            return res.status(403).json({ message: 'Access denied. Only admins and employees can login here.' });
         }
 
         // Validate password

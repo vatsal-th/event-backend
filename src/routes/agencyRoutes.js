@@ -5,13 +5,13 @@ const {
     getAgencyApplications,
     updateAgencyStatus
 } = require('../controllers/agencyController');
-const { protect, authorizeAdmin } = require('../middlewares/authMiddleware');
+const { protect, authorizePermissions } = require('../middlewares/authMiddleware');
 
 // User routes
 router.post('/apply', protect, submitAgencyApplication);
 
 // Admin routes
-router.get('/admin/applications', protect, authorizeAdmin, getAgencyApplications);
-router.put('/admin/application/:id', protect, authorizeAdmin, updateAgencyStatus);
+router.get('/admin/applications', protect, authorizePermissions('agency_approval'), getAgencyApplications);
+router.put('/admin/application/:id', protect, authorizePermissions('agency_approval'), updateAgencyStatus);
 
 module.exports = router;
