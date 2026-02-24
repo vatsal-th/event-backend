@@ -317,12 +317,11 @@ exports.createTopUp = async (req, res) => {
       });
     }
 
-    if (paymentMethod === "Cash") {
+    if (paymentMethod === "Cash" || paymentMethod === "Online") {
       if (!utrNumber || !req.file) {
         return res.status(400).json({
           success: false,
-          message:
-            "UTR Number and payment proof photo are required for Cash payments",
+          message: `UTR Number and payment proof photo are required for ${paymentMethod} payments`,
         });
       }
     }
@@ -358,7 +357,7 @@ exports.createTopUp = async (req, res) => {
     }
 
     // 2. Check Sufficient Balance (Only if using Main Wallet)
-    if (paymentMethod !== "Cash") {
+    if (paymentMethod === "Main Wallet") {
       if (req.user.points < amount) {
         return res.status(400).json({
           success: false,
@@ -376,8 +375,8 @@ exports.createTopUp = async (req, res) => {
       });
     }
 
-    // 4. Perform Deduction from User (Hold points) - Skip for Cash
-    if (paymentMethod !== "Cash") {
+    // 4. Perform Deduction from User (Hold points) - Only for Main Wallet
+    if (paymentMethod === "Main Wallet") {
       await User.findByIdAndUpdate(userId, { $inc: { points: -amount } });
     }
 
@@ -395,15 +394,17 @@ exports.createTopUp = async (req, res) => {
           ? `WAL-${Math.floor(100000 + Math.random() * 900000)}`
           : undefined),
       paymentProof:
-        paymentMethod === "Cash" && req.file ? req.file.path : undefined,
+        (paymentMethod === "Cash" || paymentMethod === "Online") && req.file
+          ? req.file.path
+          : undefined,
       walletType: walletType || "Main Wallet",
       agentCode,
       status: "Pending",
     });
 
-    // 6. Record Wallet Transactions (User Only) - Skip for Cash
+    // 6. Record Wallet Transactions (User Only) - Only for Main Wallet
     let userTx;
-    if (paymentMethod !== "Cash") {
+    if (paymentMethod === "Main Wallet") {
       userTx = await WalletTransaction.create({
         userId: userId,
         transactionType: "withdrawal",
@@ -493,7 +494,7 @@ exports.updateTopUpStatus = async (req, res) => {
       const admin = await User.findOne({ role: "admin" }).sort({
         createdAt: 1,
       });
-      if (admin && topUp.paymentMethod !== "Cash") {
+      if (admin && topUp.paymentMethod === "Main Wallet") {
         await User.findByIdAndUpdate(admin._id, {
           $inc: { points: topUp.amount },
         });
@@ -507,14 +508,19 @@ exports.updateTopUpStatus = async (req, res) => {
           relatedId: topUp._id,
           relatedModel: "TopUp",
         });
-      } else if (topUp.paymentMethod === "Cash") {
-        // For cash, admin already has money physically.
+      } else if (
+        topUp.paymentMethod === "Cash" ||
+        topUp.paymentMethod === "Online"
+      ) {
+        // For external payments, admin already has money physically/online.
         // Maybe we want to log it?
-        console.log(`Cash Top-Up Approved for UTR: ${topUp.utrNumber}`);
+        console.log(
+          `${topUp.paymentMethod} Top-Up Approved for UTR: ${topUp.utrNumber}`,
+        );
       }
     } else if (status === "Rejected") {
       // Return points back to User (Only if it was deducted from wallet)
-      if (topUp.paymentMethod !== "Cash") {
+      if (topUp.paymentMethod === "Main Wallet") {
         await User.findByIdAndUpdate(topUp.userId, {
           $inc: { points: topUp.amount },
         });

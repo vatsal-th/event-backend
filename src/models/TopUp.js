@@ -1,70 +1,73 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const topUpSchema = new mongoose.Schema({
+const topUpSchema = new mongoose.Schema(
+  {
     userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
     appId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'App',
-        required: [true, 'App is required'],
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "App",
+      required: [true, "App is required"],
     },
     targetUserId: {
-        type: String,
-        required: [true, 'Target User ID is required'],
+      type: String,
+      required: [true, "Target User ID is required"],
     },
     targetUserName: {
-        type: String,
-        required: [true, 'Target User Name is required'],
+      type: String,
+      required: [true, "Target User Name is required"],
     },
     amount: {
-        type: Number,
-        required: [true, 'Top-up amount is required'],
-        min: [1, 'Minimum amount is 1'],
+      type: Number,
+      required: [true, "Top-up amount is required"],
+      min: [1, "Minimum amount is 1"],
     },
     paymentMethod: {
-        type: String,
-        enum: ['Main Wallet', 'Cash'],
-        default: 'Main Wallet',
+      type: String,
+      enum: ["Main Wallet", "Cash", "Online"],
+      default: "Main Wallet",
     },
     utrNumber: {
-        type: String,
+      type: String,
     },
     paymentProof: {
-        type: String,
+      type: String,
     },
     walletType: {
-        type: String,
-        default: 'Main Wallet',
+      type: String,
+      default: "Main Wallet",
     },
     agentCode: {
-        type: String,
-        required: [true, 'Agent Code is required'],
+      type: String,
+      required: [true, "Agent Code is required"],
     },
     status: {
-        type: String,
-        enum: ['Pending', 'Approved', 'Rejected'],
-        default: 'Pending',
+      type: String,
+      enum: ["Pending", "Approved", "Rejected"],
+      default: "Pending",
     },
     processedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     processedAt: {
-        type: Date,
+      type: Date,
     },
     transactionId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'WalletTransaction',
-    }
-}, {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "WalletTransaction",
+    },
+  },
+  {
     timestamps: true,
-});
+  },
+);
 
 // Index for performance
 topUpSchema.index({ userId: 1, status: 1 });
 topUpSchema.index({ status: 1, createdAt: -1 });
 
-module.exports = mongoose.model('TopUp', topUpSchema);
+module.exports = mongoose.model("TopUp", topUpSchema);
