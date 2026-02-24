@@ -317,11 +317,12 @@ exports.createTopUp = async (req, res) => {
       });
     }
 
-    if (paymentMethod === "Cash" || paymentMethod === "Online") {
+    if (paymentMethod === "Cash") {
       if (!utrNumber || !req.file) {
         return res.status(400).json({
           success: false,
-          message: `UTR Number and payment proof photo are required for ${paymentMethod} payments`,
+          message:
+            "UTR Number and payment proof photo are required for Cash payments",
         });
       }
     }
@@ -375,9 +376,14 @@ exports.createTopUp = async (req, res) => {
       });
     }
 
-    // 4. Perform Deduction from User (Hold points) - Only for Main Wallet
+    // 4. Verification Check (Fast fail)
     if (paymentMethod === "Main Wallet") {
-      await User.findByIdAndUpdate(userId, { $inc: { points: -amount } });
+      if (req.user.points < amount) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient balance. You have ${req.user.points} points.`,
+        });
+      }
     }
 
     // 5. Create TopUp Record
@@ -390,37 +396,25 @@ exports.createTopUp = async (req, res) => {
       paymentMethod: paymentMethod || "Main Wallet",
       utrNumber:
         utrNumber ||
-        (paymentMethod === "Main Wallet"
+        (paymentMethod === "Main Wallet" || paymentMethod === "Online"
           ? `WAL-${Math.floor(100000 + Math.random() * 900000)}`
           : undefined),
       paymentProof:
-        (paymentMethod === "Cash" || paymentMethod === "Online") && req.file
-          ? req.file.path
-          : undefined,
+        paymentMethod === "Cash" && req.file ? req.file.path : undefined,
       walletType: walletType || "Main Wallet",
       agentCode,
       status: "Pending",
     });
 
-    // 6. Record Wallet Transactions (User Only) - Only for Main Wallet
-    let userTx;
-    if (paymentMethod === "Main Wallet") {
-      userTx = await WalletTransaction.create({
-        userId: userId,
-        transactionType: "withdrawal",
-        amount: -amount,
-        description: `Top-Up Request (Pending) - App: ${app.appName}, Target: ${targetUserId}`,
-        relatedId: topUp._id,
-        relatedModel: "TopUp",
-      });
-      topUp.transactionId = userTx._id;
-    }
+    // 6. Record Wallet Transactions - Removed from here, now handled on approval
     await topUp.save();
 
+    const isWallet = paymentMethod === "Main Wallet";
     res.status(201).json({
       success: true,
-      message:
-        "Top-up submitted successfully. Points deducted and waiting for admin approval.",
+      message: isWallet
+        ? "Top-up submitted. Points will be deducted from your wallet upon admin approval."
+        : "Top-up submitted successfully. Waiting for admin approval.",
       data: topUp,
     });
   } catch (error) {
@@ -490,51 +484,67 @@ exports.updateTopUpStatus = async (req, res) => {
     }
 
     if (status === "Approved") {
-      // Transfer to Admin only on approval (For Main Wallet transactions)
-      const admin = await User.findOne({ role: "admin" }).sort({
-        createdAt: 1,
-      });
-      if (admin && topUp.paymentMethod === "Main Wallet") {
-        await User.findByIdAndUpdate(admin._id, {
-          $inc: { points: topUp.amount },
+      const method = topUp.paymentMethod
+        ? topUp.paymentMethod.toLowerCase()
+        : "";
+
+      // Transfer Points only on approval for Main Wallet
+      if (method === "main wallet") {
+        const user = await User.findById(topUp.userId);
+        if (!user || user.points < topUp.amount) {
+          return res.status(400).json({
+            success: false,
+            message: "User has insufficient balance to approve this top-up",
+          });
+        }
+
+        // 1. Deduct from User
+        await User.findByIdAndUpdate(topUp.userId, {
+          $inc: { points: -topUp.amount },
         });
 
-        // Create Admin Credit Transaction
-        await WalletTransaction.create({
-          userId: admin._id,
-          transactionType: "admin_adjustment",
-          amount: topUp.amount,
-          description: `Top-Up Approved - Received from ${topUp.userId}`,
+        const app = await App.findById(topUp.appId);
+
+        // 2. Create User Transaction
+        const userTx = await WalletTransaction.create({
+          userId: topUp.userId,
+          transactionType: "withdrawal",
+          amount: -topUp.amount,
+          description: `Top-Up Approved - App: ${app ? app.appName : "N/A"}, Target: ${topUp.targetUserId}`,
           relatedId: topUp._id,
           relatedModel: "TopUp",
         });
-      } else if (
-        topUp.paymentMethod === "Cash" ||
-        topUp.paymentMethod === "Online"
-      ) {
-        // For external payments, admin already has money physically/online.
-        // Maybe we want to log it?
+
+        topUp.transactionId = userTx._id;
+
+        // 3. Add to Admin
+        const admin = await User.findOne({ role: "admin" }).sort({
+          createdAt: 1,
+        });
+        if (admin) {
+          await User.findByIdAndUpdate(admin._id, {
+            $inc: { points: topUp.amount },
+          });
+
+          // 4. Create Admin Transaction
+          await WalletTransaction.create({
+            userId: admin._id,
+            transactionType: "admin_adjustment",
+            amount: topUp.amount,
+            description: `Top-Up Approved - Received points from ${user.fullName}`,
+            relatedId: topUp._id,
+            relatedModel: "TopUp",
+          });
+        }
+      } else if (method === "cash" || method === "online") {
+        // For external payments, no point deduction needed, just mark as approved
         console.log(
           `${topUp.paymentMethod} Top-Up Approved for UTR: ${topUp.utrNumber}`,
         );
       }
     } else if (status === "Rejected") {
-      // Return points back to User (Only if it was deducted from wallet)
-      if (topUp.paymentMethod === "Main Wallet") {
-        await User.findByIdAndUpdate(topUp.userId, {
-          $inc: { points: topUp.amount },
-        });
-
-        // Create User Refund Transaction
-        await WalletTransaction.create({
-          userId: topUp.userId,
-          transactionType: "withdrawal_refund",
-          amount: topUp.amount,
-          description: `Top-Up Rejected - Points refunded to your wallet`,
-          relatedId: topUp._id,
-          relatedModel: "TopUp",
-        });
-      }
+      // On rejection, nothing to refund as nothing was deducted for Main Wallet
+      console.log(`Top-Up Rejected for UTR: ${topUp.utrNumber}`);
     }
 
     topUp.status = status;
