@@ -538,13 +538,9 @@ exports.updateTopUpStatus = async (req, res) => {
         }
       } else if (method === "cash" || method === "online") {
         // For external payments, no point deduction needed, just mark as approved
-        console.log(
-          `${topUp.paymentMethod} Top-Up Approved for UTR: ${topUp.utrNumber}`,
-        );
       }
     } else if (status === "Rejected") {
       // On rejection, nothing to refund as nothing was deducted for Main Wallet
-      console.log(`Top-Up Rejected for UTR: ${topUp.utrNumber}`);
     }
 
     topUp.status = status;
