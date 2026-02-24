@@ -1,42 +1,62 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const walletTransactionSchema = new mongoose.Schema({
+const walletTransactionSchema = new mongoose.Schema(
+  {
     userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
     transactionType: {
-        type: String,
-        enum: ['referral_reward', 'application_reward', 'withdrawal', 'admin_adjustment', 'withdrawal_refund'],
-        required: true,
+      type: String,
+      enum: [
+        "referral_reward",
+        "application_reward",
+        "withdrawal",
+        "admin_adjustment",
+        "withdrawal_refund",
+        "wallet_recharge",
+      ],
+      required: true,
     },
     amount: {
-        type: Number,
-        required: true,
+      type: Number,
+      required: true,
     },
     description: {
-        type: String,
-        required: true,
+      type: String,
+      required: true,
     },
     relatedId: {
-        type: mongoose.Schema.Types.ObjectId,
-        refPath: 'relatedModel',
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "relatedModel",
     },
     relatedModel: {
-        type: String,
-        enum: ['ReferralLog', 'EventApplication', 'HostingApplication', 'AgencyApplication', 'InfluencerApplication', 'User', 'WithdrawalRequest', 'TopUp'],
+      type: String,
+      enum: [
+        "ReferralLog",
+        "EventApplication",
+        "HostingApplication",
+        "AgencyApplication",
+        "InfluencerApplication",
+        "User",
+        "WithdrawalRequest",
+        "TopUp",
+        "WalletRecharge",
+      ],
     },
     timestamp: {
-        type: Date,
-        default: Date.now,
+      type: Date,
+      default: Date.now,
     },
-}, {
+  },
+  {
     timestamps: true,
-});
+  },
+);
 
 // Index for faster queries
 walletTransactionSchema.index({ userId: 1, timestamp: -1 });
 walletTransactionSchema.index({ transactionType: 1 });
 
-module.exports = mongoose.model('WalletTransaction', walletTransactionSchema);
+module.exports = mongoose.model("WalletTransaction", walletTransactionSchema);

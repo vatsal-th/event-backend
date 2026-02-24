@@ -10,6 +10,7 @@ const WalletTransaction = require("../models/WalletTransaction");
 const WithdrawalRequest = require("../models/WithdrawalRequest");
 const ReferralLog = require("../models/ReferralLog");
 const User = require("../models/userModel");
+const WalletRecharge = require("../models/WalletRecharge");
 
 // @desc    Get all dropdown data for users
 // @route   GET /api/dropdowns
@@ -156,6 +157,7 @@ exports.getLatestApplicationStatus = async (req, res) => {
       latestAgency,
       latestInfluencer,
       latestTopUp,
+      latestRecharge,
     ] = await Promise.all([
       HostingApplication.findOne({ userId })
         .populate("countryId", "name")
@@ -180,6 +182,7 @@ exports.getLatestApplicationStatus = async (req, res) => {
         .populate("appId", "appName")
         .sort({ createdAt: -1 })
         .lean(),
+      WalletRecharge.findOne({ userId }).sort({ createdAt: -1 }).lean(),
     ]);
 
     res.status(200).json({
@@ -201,6 +204,9 @@ exports.getLatestApplicationStatus = async (req, res) => {
         topup: latestTopUp
           ? { ...latestTopUp, applicationType: "TopUp" }
           : null,
+        recharge: latestRecharge
+          ? { ...latestRecharge, applicationType: "Recharge" }
+          : null,
       },
     });
   } catch (error) {
@@ -220,32 +226,16 @@ exports.scratchApplicationReward = async (req, res) => {
 
     switch (type.toLowerCase()) {
       case "hosting":
-        application = await HostingApplication.findOneAndUpdate(
-          query,
-          { isScratched: true },
-          { new: true },
-        );
+        application = await HostingApplication.findOne(query);
         break;
       case "event":
-        application = await EventApplication.findOneAndUpdate(
-          query,
-          { isScratched: true },
-          { new: true },
-        );
+        application = await EventApplication.findOne(query);
         break;
       case "agency":
-        application = await AgencyApplication.findOneAndUpdate(
-          query,
-          { isScratched: true },
-          { new: true },
-        );
+        application = await AgencyApplication.findOne(query);
         break;
       case "influencer":
-        application = await InfluencerApplication.findOneAndUpdate(
-          query,
-          { isScratched: true },
-          { new: true },
-        );
+        application = await InfluencerApplication.findOne(query);
         break;
       default:
         return res.status(400).json({ message: "Invalid application type" });
@@ -257,8 +247,30 @@ exports.scratchApplicationReward = async (req, res) => {
         .json({ message: "Application not found or unauthorized" });
     }
 
-    // Create wallet transaction for scratch card reward
+    if (application.isScratched) {
+      return res.status(400).json({ message: "Reward already scratched" });
+    }
+
+    // Check if user's wallet is frozen
+    const user = await User.findById(userId);
+    if (user && user.isWalletFrozen) {
+      return res.status(400).json({
+        success: false,
+        message: "Your wallet is frozen. Cannot reveal rewards.",
+      });
+    }
+
+    // Mark as scratched
+    application.isScratched = true;
+    await application.save();
+
+    // Create wallet transaction for scratch card reward and ADD POINTS TO USER
     if (application.rewardPoints && application.rewardPoints > 0) {
+      // Add points to user wallet
+      await User.findByIdAndUpdate(userId, {
+        $inc: { points: application.rewardPoints },
+      });
+
       await WalletTransaction.create({
         userId: userId,
         transactionType: "application_reward",
@@ -271,7 +283,7 @@ exports.scratchApplicationReward = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Reward marked as scratched",
+      message: "Reward scratched successfully and points added to your wallet.",
       data: application,
     });
   } catch (error) {
@@ -304,6 +316,8 @@ exports.getDashboardStats = async (req, res) => {
       recentTopUp,
       recentWithdrawal,
       recentInvite,
+      rechargeStats,
+      recentRecharge,
     ] = await Promise.all([
       // Total Invites: Count from ReferralLog to match referral API
       ReferralLog.countDocuments({ referrerId: userId }),
@@ -326,9 +340,13 @@ exports.getDashboardStats = async (req, res) => {
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
 
-      // Total Earnings: Sum of all positive reward transactions
       WalletTransaction.aggregate([
         { $match: { userId, amount: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      // Total Recharges: Sum of approved wallet recharge amounts
+      WalletRecharge.aggregate([
+        { $match: { userId, status: "Approved" } },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
 
@@ -355,6 +373,7 @@ exports.getDashboardStats = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(7)
         .lean(),
+      WalletRecharge.find({ userId }).sort({ createdAt: -1 }).limit(7).lean(),
     ]);
 
     // Map all activities to a common format
@@ -415,6 +434,14 @@ exports.getDashboardStats = async (req, res) => {
         date: a.createdAt,
         amount: a.rewardPoints,
       })),
+      ...recentRecharge.map((a) => ({
+        type: "Recharge",
+        subType: "Wallet",
+        title: "Wallet Recharge",
+        status: a.status,
+        date: a.createdAt,
+        amount: a.amount,
+      })),
     ];
 
     // Sort by date (newest first) and take the top 7
@@ -437,6 +464,7 @@ exports.getDashboardStats = async (req, res) => {
         totalHosts: totalHosts || 0,
         totalPlayEvents: totalPlayEvents || 0,
         totalTopUps: topUpStats[0]?.total || 0,
+        totalRecharges: rechargeStats[0]?.total || 0,
         recentActivities,
       },
     });
