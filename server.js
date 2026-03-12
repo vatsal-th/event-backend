@@ -36,6 +36,7 @@ app.use("/api/withdrawals", require("./src/routes/withdrawalRoutes"));
 app.use("/api/topups", require("./src/routes/topUpRoutes"));
 app.use("/api/salary", require("./src/routes/salaryRoutes"));
 app.use("/api/recharge", require("./src/routes/rechargeRoutes"));
+app.use("/api/notifications", require("./src/routes/notificationRoutes"));
 
 // Default Route
 app.get("/", (req, res) => {

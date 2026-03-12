@@ -212,7 +212,7 @@ exports.deleteEmployee = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find({ role: "user" }).select(
-      "fullName email points isWalletFrozen createdAt",
+      "fullName email points isWalletFrozen isActive createdAt",
     );
     res.status(200).json({ success: true, data: users });
   } catch (error) {
@@ -428,3 +428,38 @@ exports.getAdminDashboardStats = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Toggle user active/inactive status
+// @route   PUT /api/admin/users/:userId/status
+// @access  Private (Admin)
+exports.toggleUserStatus = async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    const user = await User.findById(req.params.userId);
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    user.isActive = isActive;
+    await user.save();
+
+    // Log activity
+    await ActivityLog.create({
+      user: req.user._id,
+      action: isActive ? "Activated User" : "Deactivated User",
+      details: `${isActive ? "Activated" : "Deactivated"} account for user: ${user.fullName} (${user.email})`,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `User ${isActive ? "activated" : "deactivated"} successfully`,
+      data: { isActive: user.isActive },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
