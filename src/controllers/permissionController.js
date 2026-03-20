@@ -6,36 +6,29 @@ const User = require("../models/userModel");
 // @access  Private
 exports.requestPermission = async (req, res) => {
   try {
-    const { serviceName } = req.body;
+    const { serviceName, text } = req.body;
 
     if (!["agency", "topup", "recharge"].includes(serviceName)) {
       return res.status(400).json({ success: false, message: "Invalid service name" });
     }
 
-    // Check if a request already exists
-    let permission = await ServicePermission.findOne({
+    // Check if already approved
+    const existingApproved = await ServicePermission.findOne({
       userId: req.user._id,
       serviceName,
+      status: "Approved",
     });
 
-    if (permission) {
-      if (permission.status === "Approved") {
-        return res.status(400).json({ success: false, message: "Permission already approved" });
-      }
-      if (permission.status === "Pending") {
-        return res.status(400).json({ success: false, message: "Request already pending" });
-      }
-      
-      // If rejected, allow re-requesting (updating existing record)
-      permission.status = "Pending";
-      permission.rejectionReason = undefined;
-      await permission.save();
-    } else {
-      permission = await ServicePermission.create({
-        userId: req.user._id,
-        serviceName,
-      });
+    if (existingApproved) {
+      return res.status(400).json({ success: false, message: "Permission already approved" });
     }
+
+    // Always create a new record to maintain history as requested by the user
+    const permission = await ServicePermission.create({
+      userId: req.user._id,
+      serviceName,
+      text,
+    });
 
     res.status(201).json({ success: true, data: permission });
   } catch (error) {
@@ -48,7 +41,19 @@ exports.requestPermission = async (req, res) => {
 // @access  Private
 exports.getMyPermissions = async (req, res) => {
   try {
-    const permissions = await ServicePermission.find({ userId: req.user._id });
+    const permissions = await ServicePermission.aggregate([
+      { $match: { userId: req.user._id } },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$serviceName",
+          latestRequest: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$latestRequest" } },
+      { $sort: { createdAt: -1 } } // Sort the unique results too
+    ]);
+
     res.status(200).json({ success: true, data: permissions });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -60,10 +65,52 @@ exports.getMyPermissions = async (req, res) => {
 // @access  Private (Admin)
 exports.getAllPermissionRequests = async (req, res) => {
   try {
-    const requests = await ServicePermission.find()
+    const { status, startDate, endDate } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+
+    // Status filter
+    if (status && ["Pending", "Approved", "Rejected"].includes(status)) {
+      filter.status = status;
+    }
+
+    // Date filter
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!isNaN(start.getTime())) {
+        start.setHours(0, 0, 0, 0);
+
+        const end = endDate ? new Date(endDate) : new Date(startDate);
+        if (!isNaN(end.getTime())) {
+          end.setHours(23, 59, 59, 999);
+          filter.createdAt = { $gte: start, $lte: end };
+        }
+      }
+    }
+
+    const requests = await ServicePermission.find(filter)
       .populate("userId", "fullName email")
-      .sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: requests });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalCount = await ServicePermission.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        requests,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+          totalRecords: totalCount,
+          recordsPerPage: limit,
+        },
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
