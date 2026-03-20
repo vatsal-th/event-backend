@@ -18,7 +18,7 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        default: 'General'
+        default: 'Personal'
     },
     isGlobal: {
         type: Boolean,

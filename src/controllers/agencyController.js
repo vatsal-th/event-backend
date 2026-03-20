@@ -1,6 +1,7 @@
 const AgencyApplication = require('../models/AgencyApplication');
 const { issueApplicationReward } = require('../utils/rewardHelper');
 const ActivityLog = require('../models/activityLogModel');
+const ServicePermission = require('../models/ServicePermission');
 
 // @desc    Submit agency application
 // @route   POST /api/agency/apply
@@ -22,6 +23,20 @@ exports.submitAgencyApplication = async (req, res) => {
     }
 
     try {
+        // Check for service access permission
+        const permission = await ServicePermission.findOne({
+            userId: req.user._id,
+            serviceName: 'agency',
+            status: 'Approved'
+        });
+
+        if (!permission) {
+            return res.status(403).json({
+                success: false,
+                message: 'You need admin approval to apply for an agency. Please request access first.'
+            });
+        }
+
         const application = await AgencyApplication.create({
             fullName,
             mobileNumber,

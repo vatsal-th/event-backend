@@ -6,12 +6,16 @@ const {
     createNotification,
     updateLastViewedTime,
     getUnreadCount,
-    getAllNotificationsForAdmin
+    getAllNotificationsForAdmin,
+    updateNotification,
+    deleteNotification
 } = require('../controllers/notificationController');
 const { protect, authorizeAdmin } = require('../middlewares/authMiddleware');
 
 // Get all manual notifications for Admin (management)
 router.get('/admin/all', protect, authorizeAdmin, getAllNotificationsForAdmin);
+router.put('/admin/:id', protect, authorizeAdmin, updateNotification);
+router.delete('/admin/:id', protect, authorizeAdmin, deleteNotification);
 
 // Get all notifications for logged-in user (applications + general)
 router.get('/', protect, getUserNotifications);

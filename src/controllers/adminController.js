@@ -463,3 +463,72 @@ exports.toggleUserStatus = async (req, res) => {
   }
 };
 
+// @desc    Get single user details (Admin only)
+// @route   GET /api/admin/users/:userId
+// @access  Private (Admin)
+exports.getUserDetails = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findById(userId).select("-password").lean();
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // Require models locally to avoid circular dependencies and only when needed
+    const BankDetails = require("../models/BankDetails");
+    const HostingApplication = require("../models/HostingApplication");
+    const EventApplication = require("../models/EventApplication");
+    const AgencyApplication = require("../models/AgencyApplication");
+    const InfluencerApplication = require("../models/InfluencerApplication");
+    const TopUp = require("../models/TopUp");
+    const WalletRecharge = require("../models/WalletRecharge");
+    const WithdrawalRequest = require("../models/WithdrawalRequest");
+
+    // Fetch related data in parallel
+    const [
+      bankDetails,
+      hostingApps,
+      eventApps,
+      agencyApps,
+      influencerApps,
+      topUps,
+      recharges,
+      withdrawals,
+    ] = await Promise.all([
+      BankDetails.findOne({ userId }).lean(),
+      HostingApplication.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
+      EventApplication.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
+      AgencyApplication.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
+      InfluencerApplication.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
+      TopUp.find({ userId }).sort({ createdAt: -1 }).limit(10).lean(),
+      WalletRecharge.find({ userId }).sort({ createdAt: -1 }).limit(10).lean(),
+      WithdrawalRequest.find({ userId }).sort({ createdAt: -1 }).limit(10).lean(),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...user,
+        bankDetails,
+        history: {
+          applications: {
+            hosting: hostingApps,
+            events: eventApps,
+            agency: agencyApps,
+            influencer: influencerApps,
+          },
+          financial: {
+            topUps,
+            recharges,
+            withdrawals,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

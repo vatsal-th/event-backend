@@ -2,47 +2,60 @@ const HostingApplication = require('../models/HostingApplication');
 const EventApplication = require('../models/EventApplication');
 const AgencyApplication = require('../models/AgencyApplication');
 const InfluencerApplication = require('../models/InfluencerApplication');
+const TopUp = require('../models/TopUp');
+const WalletRecharge = require('../models/WalletRecharge');
+const ReferralLog = require('../models/ReferralLog');
 const Notification = require('../models/Notification');
 const User = require('../models/userModel');
 
 // Helper to get title and message based on application type and status
-const getApplicationMeta = (type, status) => {
+const getStatusMeta = (type, status) => {
     const statusMap = {
         Pending: {
-            title: 'Application Received',
-            message: `Your application for ${type} has been received and is currently under review.`
+            title: `${type} Under Review`,
+            message: `Your ${type} request is currently under review.`
         },
         Approved: {
-            title: 'Application Approved',
-            message: `Congratulations! Your application for ${type} has been approved.`
+            title: `${type} Approved`,
+            message: `Congratulations! Your ${type} request has been approved.`
         },
         Rejected: {
-            title: 'Application Rejected',
-            message: `Unfortunately, your application for ${type} was not approved at this time. Please review our guidelines.`
+            title: `${type} Rejected`,
+            message: `Unfortunately, your ${type} request was not approved.`
+        },
+        Completed: {
+            title: `${type} Completed`,
+            message: `Your ${type} process has been completed successfully.`
         }
     };
-    return statusMap[status] || { title: 'Application Update', message: `Your ${type} application status has been updated.` };
+    return statusMap[status] || { title: `${type} Update`, message: `Your ${type} status has been updated.` };
 };
 
-// @desc    Get all notifications for the logged-in user (applications + general)
+// @desc    Get all notifications for the logged-in user (applications + financial + general)
 // @route   GET /api/notifications
 // @access  Private
 exports.getUserNotifications = async (req, res) => {
     try {
         const userId = req.user._id;
 
-        // Fetch from all 5 collections in parallel
+        // Fetch from all collections in parallel
         const [
             hostingApps,
             eventApps,
             agencyApps,
             influencerApps,
+            topups,
+            recharges,
+            referrals,
             generalNotifications
         ] = await Promise.all([
             HostingApplication.find({ userId }).select('status createdAt updatedAt').lean(),
             EventApplication.find({ userId }).select('status createdAt updatedAt').lean(),
             AgencyApplication.find({ userId }).select('status createdAt updatedAt').lean(),
             InfluencerApplication.find({ userId }).select('status createdAt updatedAt').lean(),
+            TopUp.find({ userId }).select('status amount createdAt updatedAt').lean(),
+            WalletRecharge.find({ userId }).select('status amount createdAt updatedAt').lean(),
+            ReferralLog.find({ referrerId: userId }).select('status rewardPoints createdAt updatedAt').lean(),
             Notification.find({ 
                 $or: [
                     { userId },
@@ -51,50 +64,65 @@ exports.getUserNotifications = async (req, res) => {
             }).select('title message type isRead isGlobal createdAt updatedAt').lean()
         ]);
 
-        // Map applications to unified notification format
-        const mapApplications = (apps, typeName) =>
-            apps.map((app) => {
-                const { title, message } = getApplicationMeta(typeName, app.status);
+        const lastServiceViewedAt = req.user.lastServiceViewedAt || 0;
+        const lastSystemViewedAt = req.user.lastSystemViewedAt || 0;
+
+        // Map data to unified notification format
+        const mapItems = (items, typeName, category) =>
+            items.map((item) => {
+                const { title, message } = getStatusMeta(typeName, item.status);
+                let displayMessage = message;
+                
+                // Add specific details for financial items
+                if (item.amount) displayMessage += ` Amount: ₹${item.amount}`;
+                if (item.rewardPoints) displayMessage += ` Reward: ${item.rewardPoints} points`;
+
                 return {
-                    id: app._id,
+                    id: item._id,
                     type: typeName,
-                    category: 'application',
+                    category: category,
                     title,
-                    message,
-                    status: app.status,
-                    isRead: app.updatedAt <= (req.user.lastNotificationViewedAt || 0),
-                    createdAt: app.updatedAt,
-                    updatedAt: app.updatedAt
+                    message: displayMessage,
+                    status: item.status,
+                    isRead: item.updatedAt <= lastServiceViewedAt,
+                    createdAt: item.createdAt,
+                    updatedAt: item.updatedAt
                 };
             });
 
-        const hostingNotifs = mapApplications(hostingApps, 'Event Hosting');
-        const eventNotifs = mapApplications(eventApps, 'Apply Event');
-        const agencyNotifs = mapApplications(agencyApps, 'Agency');
-        const influencerNotifs = mapApplications(influencerApps, 'Influencer');
+        const hostingNotifs = mapItems(hostingApps, 'Event Hosting', 'application');
+        const eventNotifs = mapItems(eventApps, 'Apply Event', 'application');
+        const agencyNotifs = mapItems(agencyApps, 'Agency', 'application');
+        const influencerNotifs = mapItems(influencerApps, 'Influencer', 'application');
+        const topupNotifs = mapItems(topups, 'Top Up', 'financial');
+        const rechargeNotifs = mapItems(recharges, 'Wallet Recharge', 'financial');
+        const referralNotifs = mapItems(referrals, 'Invite & Earn', 'referral');
 
-        // Map general notifications to unified format
+        // Map general notifications (System Notices)
         const generalNotifs = generalNotifications.map((notif) => ({
             id: notif._id,
-            type: notif.type || 'General',
+            type: notif.type || 'Personal',
             category: 'general',
             title: notif.title,
             message: notif.message,
             status: null,
             isRead: notif.isGlobal 
-                ? notif.updatedAt <= (req.user.lastNotificationViewedAt || 0)
-                : (notif.isRead || notif.updatedAt <= (req.user.lastNotificationViewedAt || 0)),
+                ? notif.updatedAt <= lastSystemViewedAt
+                : (notif.isRead || notif.updatedAt <= lastSystemViewedAt),
             isGlobal: notif.isGlobal,
-            createdAt: notif.updatedAt,
+            createdAt: notif.createdAt,
             updatedAt: notif.updatedAt
         }));
 
-        // Combine all and sort by createdAt descending (newest first)
+        // Combine all and sort by updatedAt descending (newest first)
         const allNotifications = [
             ...hostingNotifs,
             ...eventNotifs,
             ...agencyNotifs,
             ...influencerNotifs,
+            ...topupNotifs,
+            ...rechargeNotifs,
+            ...referralNotifs,
             ...generalNotifs
         ].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
@@ -134,7 +162,7 @@ exports.markNotificationAsRead = async (req, res) => {
 // @access  Private (Admin)
 exports.createNotification = async (req, res) => {
     try {
-        let { userId, email, title, message, type, isGlobal } = req.body;
+        let { userId, email, title, message, isGlobal } = req.body;
 
         if (!isGlobal) {
             if (!title || !message) {
@@ -158,6 +186,7 @@ exports.createNotification = async (req, res) => {
             return res.status(400).json({ success: false, message: 'title and message are required for global notifications' });
         }
 
+        const type = isGlobal ? 'Global' : 'Personal';
         const notification = await Notification.create({ userId, title, message, type, isGlobal });
 
         res.status(201).json({ success: true, data: notification });
@@ -171,13 +200,17 @@ exports.createNotification = async (req, res) => {
 // @access  Private
 exports.updateLastViewedTime = async (req, res) => {
     try {
-        await User.findByIdAndUpdate(req.user._id, {
-            lastNotificationViewedAt: Date.now()
-        });
+        const { type } = req.body; // 'service' or 'system'
+        
+        let updateField = { lastNotificationViewedAt: Date.now() };
+        if (type === 'service') updateField.lastServiceViewedAt = Date.now();
+        if (type === 'system') updateField.lastSystemViewedAt = Date.now();
+
+        await User.findByIdAndUpdate(req.user._id, updateField);
 
         res.status(200).json({
             success: true,
-            message: 'Last viewed time updated'
+            message: `${type ? type : 'General'} last viewed time updated`
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -190,33 +223,44 @@ exports.updateLastViewedTime = async (req, res) => {
 exports.getUnreadCount = async (req, res) => {
     try {
         const userId = req.user._id;
-        const lastViewedAt = req.user.lastNotificationViewedAt || 0;
+        const lastServiceViewedAt = req.user.lastServiceViewedAt || 0;
+        const lastSystemViewedAt = req.user.lastSystemViewedAt || 0;
 
-        // Fetch counts from all collections where updatedAt > lastViewedAt
+        // Fetch counts from all collections in parallel
         const [
             hostingCount,
             eventCount,
             agencyCount,
             influencerCount,
-            generalCount
+            topupCount,
+            rechargeCount,
+            referralCount,
+            systemCount
         ] = await Promise.all([
-            HostingApplication.countDocuments({ userId, updatedAt: { $gt: lastViewedAt } }),
-            EventApplication.countDocuments({ userId, updatedAt: { $gt: lastViewedAt } }),
-            AgencyApplication.countDocuments({ userId, updatedAt: { $gt: lastViewedAt } }),
-            InfluencerApplication.countDocuments({ userId, updatedAt: { $gt: lastViewedAt } }),
+            HostingApplication.countDocuments({ userId, updatedAt: { $gt: lastServiceViewedAt } }),
+            EventApplication.countDocuments({ userId, updatedAt: { $gt: lastServiceViewedAt } }),
+            AgencyApplication.countDocuments({ userId, updatedAt: { $gt: lastServiceViewedAt } }),
+            InfluencerApplication.countDocuments({ userId, updatedAt: { $gt: lastServiceViewedAt } }),
+            TopUp.countDocuments({ userId, updatedAt: { $gt: lastServiceViewedAt } }),
+            WalletRecharge.countDocuments({ userId, updatedAt: { $gt: lastServiceViewedAt } }),
+            ReferralLog.countDocuments({ referrerId: userId, updatedAt: { $gt: lastServiceViewedAt } }),
             Notification.countDocuments({ 
                 $or: [
-                    { userId, isRead: false, updatedAt: { $gt: lastViewedAt } },
-                    { isGlobal: true, updatedAt: { $gt: lastViewedAt } }
+                    { userId, isRead: false, updatedAt: { $gt: lastSystemViewedAt } },
+                    { isGlobal: true, updatedAt: { $gt: lastSystemViewedAt } }
                 ]
             })
         ]);
 
-        const totalUnread = hostingCount + eventCount + agencyCount + influencerCount + generalCount;
+        const serviceUnread = hostingCount + eventCount + agencyCount + influencerCount + 
+                             topupCount + rechargeCount + referralCount;
+        const systemUnread = systemCount;
 
         res.status(200).json({
             success: true,
-            unreadCount: totalUnread
+            serviceUnread,
+            systemUnread,
+            totalUnread: serviceUnread + systemUnread
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -237,6 +281,81 @@ exports.getAllNotificationsForAdmin = async (req, res) => {
             count: notifications.length,
             data: notifications
         });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Update a manual notification (Admin only)
+// @route   PUT /api/notifications/admin/:id
+// @access  Private (Admin)
+exports.updateNotification = async (req, res) => {
+    try {
+        let { title, message, type, isGlobal, email, userId } = req.body;
+
+        const notification = await Notification.findById(req.params.id);
+
+        if (!notification) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
+
+        // Handle User replacement or conversion to Personal
+        if (email || userId) {
+            if (email && !userId) {
+                const user = await User.findOne({ email });
+                if (!user) {
+                    return res.status(404).json({ success: false, message: 'User not found with this email' });
+                }
+                userId = user._id;
+            }
+            notification.userId = userId;
+            // If we are setting a user, it should likely not be global anymore unless explicitly kept
+            if (typeof isGlobal === 'undefined' && notification.isGlobal) {
+                notification.isGlobal = false;
+            }
+        }
+
+        // Explicitly handle Global toggle
+        if (typeof isGlobal !== 'undefined') {
+            notification.isGlobal = isGlobal;
+            if (isGlobal) {
+                notification.userId = undefined; // Clear user if it becomes global
+            }
+        }
+
+        if (title) notification.title = title;
+        if (message) notification.message = message;
+        
+        // Always sync type with isGlobal
+        notification.type = notification.isGlobal ? 'Global' : 'Personal';
+
+        // Validation: If it's NOT global, it MUST have a user
+        if (!notification.isGlobal && !notification.userId) {
+            return res.status(400).json({ success: false, message: 'User (email or userId) is required for personal notifications' });
+        }
+
+        await notification.save();
+
+        res.status(200).json({ success: true, data: notification });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Delete a manual notification (Admin only)
+// @route   DELETE /api/notifications/admin/:id
+// @access  Private (Admin)
+exports.deleteNotification = async (req, res) => {
+    try {
+        const notification = await Notification.findById(req.params.id);
+
+        if (!notification) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
+
+        await notification.deleteOne();
+
+        res.status(200).json({ success: true, message: 'Notification deleted successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -5,6 +5,7 @@ const User = require("../models/userModel");
 const WalletTransaction = require("../models/WalletTransaction");
 const TopUpSettings = require("../models/TopUpSettings");
 const AdminPaymentMethod = require("../models/AdminPaymentMethod");
+const ServicePermission = require("../models/ServicePermission");
 const bcrypt = require("bcryptjs");
 
 // ==================== SETTINGS (ADMIN) ====================
@@ -281,6 +282,20 @@ exports.getApps = async (req, res) => {
 exports.createTopUp = async (req, res) => {
   try {
     const userId = req.user._id;
+
+    // Check for service access permission
+    const permission = await ServicePermission.findOne({
+      userId,
+      serviceName: "topup",
+      status: "Approved",
+    });
+
+    if (!permission) {
+      return res.status(403).json({
+        success: false,
+        message: "You need admin approval for top-ups. Please request access first.",
+      });
+    }
 
     // Check if user's wallet is frozen
     if (req.user.isWalletFrozen) {
