@@ -12,6 +12,10 @@ const servicePermissionSchema = new mongoose.Schema(
       enum: ["agency", "topup", "recharge"],
       required: true,
     },
+    text: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
       enum: ["Pending", "Approved", "Rejected"],
@@ -30,8 +34,7 @@ const servicePermissionSchema = new mongoose.Schema(
   }
 );
 
-// Compound index to ensure a user can have only one request per service (or track history differently if needed)
-// For now, let's allow unique userId + serviceName combination to track the latest state or manage re-requests
-servicePermissionSchema.index({ userId: 1, serviceName: 1 }, { unique: true });
+// Compound index to help with filtering/searching (no longer unique to allow history)
+servicePermissionSchema.index({ userId: 1, serviceName: 1 });
 
 module.exports = mongoose.model("ServicePermission", servicePermissionSchema);
