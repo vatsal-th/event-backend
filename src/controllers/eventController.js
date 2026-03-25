@@ -80,15 +80,30 @@ exports.getMyEvents = async (req, res) => {
 // @access  Private (Admin)
 exports.getAllEventApplications = async (req, res) => {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
         const applications = await EventApplication.find()
             .populate('countryId', 'name')
             .populate('userId', 'fullName email')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        const totalCount = await EventApplication.countDocuments();
 
         res.status(200).json({
             success: true,
-            count: applications.length,
-            data: applications
+            data: {
+                applications,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(totalCount / limit),
+                    totalRecords: totalCount,
+                    recordsPerPage: limit,
+                },
+            },
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

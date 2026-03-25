@@ -11,6 +11,8 @@ const {
   freezeUserWallet,
   adjustUserBalance,
   getAdminDashboardStats,
+  toggleUserStatus,
+  getUserDetails,
 } = require("../controllers/adminController");
 const { protect, authorizeAdmin } = require("../middlewares/authMiddleware");
 
@@ -33,5 +35,7 @@ router.put(
   authorizeAdmin,
   adjustUserBalance,
 );
+router.put("/users/:userId/status", protect, authorizeAdmin, toggleUserStatus);
+router.get("/users/:userId", protect, authorizeAdmin, getUserDetails);
 
 module.exports = router;

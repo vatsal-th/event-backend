@@ -2,12 +2,27 @@ const WalletRecharge = require("../models/WalletRecharge");
 const User = require("../models/userModel");
 const WalletTransaction = require("../models/WalletTransaction");
 const ActivityLog = require("../models/activityLogModel");
+const ServicePermission = require("../models/ServicePermission");
 
 // @desc    Submit a wallet recharge request
 // @route   POST /api/wallet/recharge
 // @access  Private (Agent)
 exports.submitRechargeRequest = async (req, res) => {
   try {
+    // Check for service access permission
+    const permission = await ServicePermission.findOne({
+      userId: req.user._id,
+      serviceName: "recharge",
+      status: "Approved",
+    });
+
+    if (!permission) {
+      return res.status(403).json({
+        success: false,
+        message: "You need admin approval for wallet recharge. Please request access first.",
+      });
+    }
+
     const { agentId, agentName, amount, rechargeType, utrNumber } = req.body;
 
     if (!agentId || !agentName || !amount || !rechargeType || !utrNumber) {

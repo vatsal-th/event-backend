@@ -72,6 +72,22 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    lastNotificationViewedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    lastServiceViewedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    lastSystemViewedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

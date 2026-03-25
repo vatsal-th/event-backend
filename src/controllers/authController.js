@@ -102,6 +102,11 @@ exports.loginUser = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await bcrypt.compare(password, user.password))) {
+      if (user.isActive === false) {
+        return res.status(403).json({
+          message: "Your account is inactive",
+        });
+      }
       res.json({
         _id: user.id,
         fullName: user.fullName,
@@ -143,6 +148,11 @@ exports.adminLogin = async (req, res) => {
 
     // Validate password
     if (await bcrypt.compare(password, user.password)) {
+      if (user.isActive === false) {
+        return res.status(403).json({
+          message: "Your account is inactive",
+        });
+      }
       res.json({
         _id: user.id,
         fullName: user.fullName,
@@ -186,7 +196,7 @@ exports.forgotPassword = async (req, res) => {
 
     await user.save();
 
-    const frontendUrl = process.env.FRONTEND_URL;
+    const frontendUrl = process.env.FRONTEND_URL.split(",")[0];
     const resetUrl = `${frontendUrl}/resetpassword/${resetToken}`;
 
     const message = `
