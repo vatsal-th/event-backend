@@ -14,12 +14,7 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(
-  cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"],
-    credentials: true,
-  }),
-);
+app.use(cors());
 
 // Routes
 app.use("/api/auth", require("./src/routes/authRoutes"));
@@ -41,8 +36,6 @@ app.use("/api/withdrawals", require("./src/routes/withdrawalRoutes"));
 app.use("/api/topups", require("./src/routes/topUpRoutes"));
 app.use("/api/salary", require("./src/routes/salaryRoutes"));
 app.use("/api/recharge", require("./src/routes/rechargeRoutes"));
-app.use("/api/notifications", require("./src/routes/notificationRoutes"));
-app.use("/api/permissions", require("./src/routes/permissionRoutes"));
 
 // Default Route
 app.get("/", (req, res) => {
